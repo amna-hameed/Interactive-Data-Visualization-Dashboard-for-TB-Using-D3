@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TB Relationship Timeline</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px;
+            background: #784d95; /* Dark blue-gray background */
+    color: #f1f1f1; /* Light text for contrast */
+    font-family: Arial, sans-serif; }
+        #timeline { width: 100%; height: 600px; }
+        #controls { margin: 20px 0; display: flex; flex-direction: column; gap: 10px; }
+        .filter-group { display: flex; align-items: center; gap: 10px; }
+        #date-range { width: 100%; }
+        .dot { transition: all 0.8s ease; }
+        .axis-label { font-size: 14px; }
+        .legend { font-size: 12px; }
+        .filter-label { min-width: 100px; }
+        select { padding: 5px; }
+        
+    </style>
+</head>
+<body>
+    <h1>TB Diagnosis and Treatment Timeline</h1>
+    <div id="controls">
+        <div class="filter-group">
+            <button id="play-pause">Play</button>
+            <input type="range" id="date-range" min="0" max="100" value="0">
+            <span id="current-date">Year: 1995</span>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Date Range:</span>
+            <input type="number" id="start-year" min="1995" max="2024" value="1995" style="width: 70px;">
+            <span>to</span>
+            <input type="number" id="end-year" min="1995" max="2024" value="2024" style="width: 70px;">
+            <button id="apply-filter">Apply Filter</button>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Size By:</span>
+            <select id="size-metric">
+                <option value="sector_ratio">Private vs Public Sector Ratio</option>
+                <option value="treatment_success">Treatment Success Rate</option>
+                <option value="deaths">Number of Deaths</option>
+                <option value="failures">Treatment Failures</option>
+                <option value="lost_followup">Cases Lost to Follow-up</option>
+            </select>
+        </div>
+    </div>
+    <svg id="timeline"></svg>
+
+    <script>
+        d3.csv('data.csv').then(data => {
+            // Preprocess data
+            const uniqueYears = [...new Set(data.map(d => +d.year))].sort();
+            const regions = [...new Set(data.map(d => d['WHO_Region']))];
+            
+            // Setup SVG
+            const margin = { top: 50, right: 150, bottom: 70, left: 80 };
+            const width = 1000 - margin.left - margin.right;
+            const height = 600 - margin.top - margin.bottom;
+
+            const svg = d3.select("#timeline")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // Color scale for regions
+            const colorScale = d3.scaleOrdinal()
+                .domain(regions)
+                .range(['#4e79a7', '#f28e2c', '#e15759', '#76b7b2', '#59a14f', '#edc949']);
+
+            // Initialize scales with fixed date range
+            const xScale = d3.scaleLinear()
+                .domain([1995, 2024])
+                .range([0, width]);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => +d.New_Incidence || 0)])
+                .range([height, 0]);
+
+            // Function to calculate dot size based on selected metric
+            function calculateDotSize(d, metric) {
+                const baseSize = 3; // Minimum size
+                const scaleFactor = 2; // Adjust this to make dots larger/smaller overall
+                
+                switch(metric) {
+                    case 'sector_ratio':
+                        const private = +d['New TB diagnoses in the private sector'] || 0;
+                        const public = +d['New TB diagnoses in the public sector'] || 0;
+                        return baseSize + (private / (public + private)) * 20 * scaleFactor;
+                    
+                    case 'treatment_success':
+                        return baseSize + (+d['Treatment success rate (percentage)'] || 0) / 5 * scaleFactor;
+                    
+                    case 'deaths':
+                        return baseSize + Math.sqrt(+d['Number of deaths'] || 0) / 5 * scaleFactor;
+                    
+                    case 'failures':
+                        return baseSize + Math.sqrt(+d['Number of treatment failures'] || 0) / 3 * scaleFactor;
+                    
+                    case 'lost_followup':
+                        return baseSize + Math.sqrt(+d['Number of cases lost to follow-up'] || 0) / 4 * scaleFactor;
+                    
+                    default:
+                        return baseSize * 2;
+                }
+            }
+
+            // Add dots
+            let dots = svg.selectAll(".dot")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "dot")
+                .attr("cx", d => xScale(+d.year))
+                .attr("cy", d => yScale(+d.New_Incidence))
+                .attr("r", d => calculateDotSize(d, 'sector_ratio'))
+                .attr("fill", d => colorScale(d['WHO_Region']))
+                .attr("opacity", 0.7)
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 1);
+
+            // Add axes
+            const xAxis = d3.axisBottom(xScale)
+                .tickFormat(d3.format("d"))
+                .ticks(10);
+                
+            const yAxis = d3.axisLeft(yScale)
+                .ticks(10);
+
+            const xAxisGroup = svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(xAxis);
+
+            const yAxisGroup = svg.append("g")
+                .call(yAxis);
+
+            // Add axis labels
+            svg.append("text")
+                .attr("class", "axis-label")
+                .attr("text-anchor", "middle")
+                .attr("x", width/2)
+                .attr("y", height + 50)
+                .text("Year");
+
+            svg.append("text")
+                .attr("class", "axis-label")
+                .attr("text-anchor", "middle")
+                .attr("transform", "rotate(-90)")
+                .attr("x", -height/2)
+                .attr("y", -60)
+                .text("New TB Incidence");
+
+            // Add legend
+            const legend = svg.append("g")
+                .attr("class", "legend")
+                .attr("transform", `translate(${width + 20}, 0)`);
+
+            regions.forEach((region, i) => {
+                const legendRow = legend.append("g")
+                    .attr("transform", `translate(0, ${i * 20})`);
+                
+                legendRow.append("circle")
+                    .attr("cx", 0)
+                    .attr("cy", 0)
+                    .attr("r", 6)
+                    .style("fill", colorScale(region));
+                
+                legendRow.append("text")
+                    .attr("x", 10)
+                    .attr("y", 4)
+                    .text(region);
+            });
+
+            // Size metric change handler
+            d3.select("#size-metric").on("change", function() {
+                const selectedMetric = this.value;
+                dots.transition()
+                    .duration(1000)
+                    .attr("r", d => calculateDotSize(d, selectedMetric));
+            });
+
+            // Interactivity
+            let currentProgress = 0;
+            let isPlaying = false;
+            let filteredStartYear = 1995;
+            let filteredEndYear = 2024;
+
+            d3.select("#play-pause").on("click", function() {
+                isPlaying = !isPlaying;
+                d3.select(this).text(isPlaying ? "Pause" : "Play");
+                if (isPlaying) animate();
+            });
+
+            d3.select("#date-range").on("input", function() {
+                currentProgress = +this.value;
+                updateVisualization();
+            });
+
+            d3.select("#apply-filter").on("click", function() {
+                filteredStartYear = +d3.select("#start-year").property("value");
+                filteredEndYear = +d3.select("#end-year").property("value");
+                
+                xScale.domain([filteredStartYear, filteredEndYear]);
+                xAxisGroup.call(xAxis);
+
+                dots.attr("cx", d => xScale(+d.year))
+                    .style("display", d => {
+                        const year = +d.year;
+                        return (year >= filteredStartYear && year <= filteredEndYear) ? "block" : "none";
+                    });
+            });
+
+            function getTooltipText(d, metric) {
+                let baseText = `${d.WHO_Region}: ${d.New_Incidence} cases (${d.year})`;
+                
+                switch(metric) {
+                    case 'sector_ratio':
+                        const private = +d['New TB diagnoses in the private sector'] || 0;
+                        const public = +d['New TB diagnoses in the public sector'] || 0;
+                        const ratio = ((private / (private + public)) * 100).toFixed(1);
+                        return `${baseText}\nPrivate Sector: ${ratio}%`;
+                    
+                    case 'treatment_success':
+                        return `${baseText}\Treatment Success: ${d['Treatment success rate (percentage)']}%`;
+                    
+                    case'deaths':
+                        return `${baseText}\nDeaths: ${d['Number of deaths']}`;
+                    
+                    case 'failures':
+                        return `${baseText}\nTreatment Failures: ${d['Number of treatment failures']}`;
+                    
+                    case 'lost_followup':
+                        return `${baseText}\nLost to Follow-up: ${d['Number of cases lost to follow-up']}`;
+                    
+                    default:
+                        return baseText;
+                }
+            }
+
+            function updateVisualization() {
+                const currentYear = filteredStartYear + 
+                    (filteredEndYear - filteredStartYear) * (currentProgress / 100);
+                
+                d3.select("#current-date").text(`Year: ${Math.round(currentYear)}`);
+
+                const selectedMetric = d3.select("#size-metric").property("value");
+
+                dots.transition()
+                    .duration(800)
+                    .attr("opacity", d => {
+                        const year = +d.year;
+                        return (year <= currentYear && year >= filteredStartYear && year <= filteredEndYear) ? 0.7 : 0.1;
+                    });
+
+                dots.on("mouseover", function(event, d) {
+                    const year = +d.year;
+                    if (year <= currentYear && year >= filteredStartYear && year <= filteredEndYear) {
+                        d3.select(this)
+                            .transition()
+                            .duration(200)
+                            .attr("opacity", 1)
+                            .attr("r", d => calculateDotSize(d, selectedMetric) * 1.5);
+
+                        // Multi-line tooltip
+                        const tooltipText = getTooltipText(d, selectedMetric).split('\n');
+                        tooltipText.forEach((text, i) => {
+                            svg.append("text")
+                                .attr("class", "tooltip")
+                                .attr("x", xScale(year) + 10)
+                                .attr("y", yScale(+d.New_Incidence) - 10 + (i * 20))
+                                .text(text);
+                        });
+                    }
+                })
+                .on("mouseout", function(event, d) {
+                    const year = +d.year;
+                    if (year <= currentYear && year >= filteredStartYear && year <= filteredEndYear) {
+                        d3.select(this)
+                            .transition()
+                            .duration(200)
+                            .attr("opacity", 0.7)
+                            .attr("r", d => calculateDotSize(d, selectedMetric));
+                        
+                        svg.selectAll(".tooltip").remove();
+                    }
+                });
+            }
+
+            function animate() {
+                if (isPlaying && currentProgress < 100) {
+                    currentProgress += 0.5;
+                    d3.select("#date-range").property("value", currentProgress);
+                    updateVisualization();
+                    setTimeout(() => requestAnimationFrame(animate), 100);
+                } else if (currentProgress >= 100) {
+                    isPlaying = false;
+                    d3.select("#play-pause").text("Play");
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Map Chart</title>
+    <style>
+         body {
+            background-color: #443f92; /* Light gray background for the page */
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        .tooltip {
+            position: absolute;
+            background-color: rgb(204, 17, 17);
+            padding: 10px;
+            border: 1px solid #fdfdfd;
+            border-radius: 4px;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 1000;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+        }
+        .country {
+            fill: #e4b51a;
+            stroke: #999;
+            stroke-width: 0.5;
+            transition: fill 0.2s;
+        }
+        .country:hover {
+            fill: #eb1135; 
+        }
+        .pin {
+            cursor: pointer;
+            transition: all 0.2s;
+            stroke: rgb(195, 214, 193);
+            stroke-width: 1px;
+        }
+        .pin:hover {
+            r: 8;
+            stroke-width: 2px;
+        }
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgb(255, 255, 255);
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        #map-container {
+            position: relative;
+            width: 100%;
+            height: 600px;
+            margin-top: 60px; 
+        }
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgb(255, 255, 255);
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        .caption {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            font-size: 36px;
+            font-weight: bold;
+            border-radius: 4px;
+            z-index: 1100; 
+        }
+        .country-name {
+            font-size: 10px;
+            font-family: Arial, sans-serif;
+            fill: black;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Caption for the map -->
+    <div class="caption">
+        Global TB Relationship Data Visualization
+    </div>
+
+    <div id="map-container">
+        <div class="controls">
+            <select id="region-filter">
+                <option value="all">All Regions</option>
+            </select>
+            <select id="relationship-filter">
+                <option value="all">All Relationships</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="hiv">HIV Positive</option>
+            </select>
+        </div>
+        <div class="legend"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+    
+    <script>
+        async function createMap() {
+            // Load the CSV data
+            const data = await d3.csv("country-coordinates.csv");
+
+            const width = document.getElementById('map-container').offsetWidth;
+            const height = 1200;
+
+            const svg = d3.select('#map-container')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            const projection = d3.geoMercator()
+                .scale(width / 2 / Math.PI)
+                .translate([width / 2, height / 2]);
+
+            const path = d3.geoPath().projection(projection);
+
+            const g = svg.append('g');
+
+            const zoom = d3.zoom()
+                .scaleExtent([1, 8])
+                .on('zoom', (event) => {
+                    g.attr('transform', event.transform);
+                });
+
+            svg.call(zoom);
+
+            const tooltip = d3.select('body')
+                .append('div')
+                .attr('class', 'tooltip');
+
+            // Load world map
+            const world = await d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+
+            // Draw countries
+            const countries = g.selectAll('path')
+                .data(topojson.feature(world, world.objects.countries).features)
+                .enter()
+                .append('path')
+                .attr('class', 'country')
+                .attr('d', path);
+
+            // Add country names
+            g.selectAll('.country-name')
+                .data(topojson.feature(world, world.objects.countries).features)
+                .enter()
+                .append('text')
+                .attr('class', 'country-name')
+                .attr('transform', function(d) {
+                    const centroid = path.centroid(d);
+                    return `translate(${centroid[0]}, ${centroid[1]})`;
+                })
+                .attr('dy', 3) // Adjust vertical positioning
+                .attr('text-anchor', 'middle')
+                .text(d => d.properties.name);
+
+            // Color scale for relationship data
+            const colorScale = d3.scaleOrdinal()
+                .domain(['male', 'female', 'hiv'])
+                .range(['#1f77b4', '#ff7f0e', '#2ca02c']);
+
+            // Create legend for relationship data
+            const legend = d3.select('.legend');
+            ['male', 'female', 'hiv'].forEach(type => {
+                legend.append('div')
+                    .style('margin-bottom', '5px')
+                    .html(`
+                        <span style="display: inline-block; width: 12px; height: 12px; background: ${colorScale(type)}; margin-right: 5px;"></span>
+                        ${type.charAt(0).toUpperCase() + type.slice(1)}
+                    `);
+            });
+
+            // Function to update pins based on filters
+            function updatePins(data, regionFilter, relationshipFilter) {
+                // Filter data based on region and relationship type
+                const filteredData = data.filter(d => {
+                    const regionMatch = regionFilter === 'all' || d.WHO_Region === regionFilter;
+                    const relationshipMatch = relationshipFilter === 'all' || 
+                        (relationshipFilter === 'male' && d.New_Relationship_Male > 0) ||
+                        (relationshipFilter === 'female' && d.New_Relationship_Female > 0) ||
+                        (relationshipFilter === 'hiv' && d.New_Relationship_HIV_Positive > 0);
+                    return regionMatch && relationshipMatch;
+                });
+
+                // Update pins based on filtered data
+                const pins = g.selectAll('.pin')
+                    .data(filteredData, d => d.iso3);
+
+                pins.exit().remove();
+
+                const pinsEnter = pins.enter()
+                    .append('circle')
+                    .attr('class', 'pin')
+                    .attr('r', 5)
+                    .attr('cx', d => {
+                        const coords = projection([parseFloat(d.Longitude), parseFloat(d.Latitude)]);
+                        return coords ? coords[0] : null;
+                    })
+                    .attr('cy', d => {
+                        const coords = projection([parseFloat(d.Longitude), parseFloat(d.Latitude)]);
+                        return coords ? coords[1] : null;
+                    })
+                    .attr('fill', d => {
+                        if (relationshipFilter === 'all') {
+                            return colorScale('male'); // Default color
+                        }
+                        return colorScale(relationshipFilter);
+                    })
+                    .on('mouseover', (event, d) => {
+                        tooltip.transition()
+                            .duration(200)
+                            .style('opacity', .9);
+                        tooltip.html(`
+                            <strong>${d.country}</strong><br/>
+                            Region: ${d.WHO_Region}<br/>
+                            Male: ${d.New_Relationship_Male}<br/>
+                            Female: ${d.New_Relationship_Female}<br/>
+                            HIV+: ${d.New_Relationship_HIV_Positive}
+                        `)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 28) + 'px');
+                    })
+                    .on('mouseout', () => {
+                        tooltip.transition()
+                            .duration(500)
+                            .style('opacity', 0);
+                    })
+                    .on('click', (event, d) => {
+                        g.selectAll('.pin')
+                            .attr('opacity', 0.3);
+                        d3.select(event.currentTarget)
+                            .attr('opacity', 1);
+                    });
+            }
+
+            // Update region filter options
+            const regions = [...new Set(data.map(d => d.WHO_Region))];
+            d3.select('#region-filter')
+                .selectAll('option')
+                .data(['all', ...regions])
+                .enter()
+                .append('option')
+                .text(d => d === 'all' ? 'All Regions' : d)
+                .attr('value', d => d);
+
+            // Add filter event listeners
+            d3.select('#region-filter').on('change', function() {
+                updatePins(data, this.value, d3.select('#relationship-filter').property('value'));
+            });
+
+            d3.select('#relationship-filter').on('change', function() {
+                updatePins(data, d3.select('#region-filter').property('value'), this.value);
+            });
+
+            // Initial render
+            updatePins(data, 'all', 'all');
+        }
+
+        createMap();
+    </script>
+</body>
+</html>

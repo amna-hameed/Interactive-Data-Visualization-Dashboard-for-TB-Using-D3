@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hierarchical Tree Map with Features</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            
+    background: linear-gradient(135deg, #5c3d86, #6a4c93); /* Soft blue to purple gradient */
+    font-family: Arial, sans-serif;
+    color: #fff; /* Light text for contrast */
+
+
+        }
+
+        .tooltip {
+            position: absolute;
+            background: #f9f9f9;
+            padding: 20px;
+            border: 2px solid #ccc;
+            border-radius: 9px;
+            pointer-events: none;
+            font-size: 20px;
+        }
+        rect {
+            cursor: pointer;
+            stroke: #fff;
+            stroke-width: 1px;
+        }
+        rect:hover {
+            stroke: #000;
+            stroke-width: 2px;
+        }
+        .breadcrumb {
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        .filters {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="filters">
+        <label for="regionFilter" style="font-size: 18px; font-weight: bold;">Filter by WHO Region:</label>
+        <select id="regionFilter">
+            <option value="all">All</option>
+        </select>
+    </div>
+    <div class="breadcrumb" id="breadcrumb">Breadcrumb: World</div>
+    <div id="treemap"></div>
+    <div class="tooltip" id="tooltip" style="display: none;"></div>
+
+    <script>
+        d3.csv("data.csv").then(function(data) {
+            // Prepare Filters
+            const regions = Array.from(new Set(data.map(d => d.WHO_Region)));
+            const regionFilter = d3.select("#regionFilter");
+            regions.forEach(region => {
+                regionFilter.append("option").attr("value", region).text(region);
+            });
+
+            // Create a hierarchy
+            const createHierarchy = (filteredData) => {
+                const hierarchy = d3.group(
+                    filteredData,
+                    d => d.WHO_Region,
+                    d => d.country
+                );
+
+                return d3.hierarchy({
+                    name: "World",
+                    children: Array.from(hierarchy, ([key, value]) => ({
+                        name: key,
+                        children: Array.from(value, ([subKey, subValue]) => ({
+                            name: subKey,
+                            value: d3.sum(subValue, d => +d.New_Incidence || 1),
+                            metric: d3.sum(subValue, d => +d.New_Relationship_Male || 0)
+                        }))
+                    }))
+                }).sum(d => d.value);
+            };
+
+            const updateTreemap = (filteredData) => {
+                const root = createHierarchy(filteredData);
+
+                // Treemap dimensions
+                const width = 1500;
+                const height = 1100;
+
+                const treemap = d3.treemap()
+                    .size([width, height])
+                    .paddingInner(3);
+
+                treemap(root);
+
+                const color = d3.scaleSequential(d3.interpolateBlues)
+                    .domain([0, d3.max(root.leaves(), d => d.data.metric)]);
+
+                const svg = d3.select("#treemap")
+                    .html("") // Clear previous treemap
+                    .append("svg")
+                    .attr("width", width)
+                    .attr("height", height);
+
+                const tooltip = d3.select("#tooltip");
+
+                const render = (node, breadcrumbs = ["World"]) => {
+                    svg.selectAll("*").remove();
+
+                    // Update breadcrumb
+                    d3.select("#breadcrumb")
+                        .text("Breadcrumb: " + breadcrumbs.join(" > "));
+
+                    const nodes = svg.selectAll("g")
+                        .data(node.descendants())
+                        .enter()
+                        .append("g")
+                        .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+                    // Draw rectangles
+                    nodes.append("rect")
+                        .attr("width", d => d.x1 - d.x0)
+                        .attr("height", d => d.y1 - d.y0)
+                        .attr("fill", d => d.children ? "#ccc" : color(d.data.metric))
+                        .on("mouseover", (event, d) => {
+                            tooltip.style("display", "block")
+                                .style("left", `${event.pageX + 5}px`)
+                                .style("top", `${event.pageY + 5}px`)
+                                .html(`
+                                    <strong>${d.data.name}</strong><br>
+                                    Value: ${d.value || "N/A"}<br>
+                                    Metric: ${d.data.metric || "N/A"}
+                                `);
+                        })
+                        .on("mouseout", () => {
+                            tooltip.style("display", "none");
+                        })
+                        .on("click", (event, d) => {
+                            if (d.children) {
+                                render(d, [...breadcrumbs, d.data.name]);
+                            }
+                        });
+
+                    // Add labels for larger rectangles
+                    nodes.filter(d => d.x1 - d.x0 > 60 && d.y1 - d.y0 > 20)
+                        .append("text")
+                        .attr("x", 16)
+                        .attr("y", 15)
+                        .text(d => d.data.name)
+                        .attr("fill", "#000");
+                };
+
+                render(root);
+            };
+
+            // Update treemap when filter changes
+            regionFilter.on("change", () => {
+                const selectedRegion = regionFilter.node().value;
+                const filteredData = selectedRegion === "all"
+                    ? data
+                    : data.filter(d => d.WHO_Region === selectedRegion);
+
+                updateTreemap(filteredData);
+            });
+
+            // Initial Render
+            updateTreemap(data);
+        });
+    </script>
+</body>
+</html>

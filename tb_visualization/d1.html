@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Overview</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            background: linear-gradient(135deg, #1e3c72, #2a5298, #6a4c93);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            width: 100%;
+            padding: 10px 0;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            text-align: center;
+        }
+
+        .header nav {
+            display: flex;
+            justify-content: space-around;
+        }
+
+        .header nav a {
+            color: white;
+            text-decoration: none;
+            padding: 5px 15px;
+            font-size: 1rem;
+            transition: color 0.3s;
+        }
+
+        .header nav a:hover {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .dashboard-title {
+            margin: 10px 0;
+            color: white;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .overview-layout {
+            display: grid;
+            grid-template-areas:
+                "top-left center top-right"
+                "bottom-left center bottom-right";
+            grid-template-columns: 1fr 1.2fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 20px;
+            width: 95%;
+            height: calc(100vh - 120px);
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .visualization {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .visualization iframe {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 320%;
+            height: 320%;
+            border: none;
+            transform: translate(-50%, -50%) scale(0.30);
+            transform-origin: center center;
+        }
+
+        .center {
+            grid-area: center;
+            border-radius: 50%;
+            overflow: hidden;
+        }
+
+        .center iframe {
+            width: 250%;
+            height: 250%;
+            transform: translate(-50%, -50%) scale(0.40);
+        }
+
+        .top-left { grid-area: top-left; }
+        .top-right { grid-area: top-right; }
+        .bottom-left { grid-area: bottom-left; }
+        .bottom-right { grid-area: bottom-right; }
+
+        @media screen and (max-width: 768px) {
+            .overview-layout {
+                grid-template-areas:
+                    "top-left top-right"
+                    "center center"
+                    "bottom-left bottom-right";
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: 1fr 1.2fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <nav>
+            <a href="2nd.html">Page 1</a>
+            <a href="5th.html">Page 2</a>
+            <a href="1st.html">Page 3</a>
+            <a href="3rd.html">Page 4</a>
+            <a href="4th.html">Page 5</a>
+            <a href="d1.html">Dashboard Overview</a>
+        </nav>
+    </div>
+    <div class="dashboard-title">Dashboard Overview</div>
+    <div class="overview-layout">
+        <div class="visualization top-left">
+            <iframe src="2nd.html"></iframe>
+        </div>
+        <div class="visualization top-right">
+            <iframe src="5th.html"></iframe>
+        </div>
+        <div class="visualization center">
+            <iframe src="1st.html"></iframe>
+        </div>
+        <div class="visualization bottom-left">
+            <iframe src="3rd.html"></iframe>
+        </div>
+        <div class="visualization bottom-right">
+            <iframe src="4th.html"></iframe>
+        </div>
+    </div>
+</body>
+</html>
